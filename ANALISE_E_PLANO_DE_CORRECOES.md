@@ -471,3 +471,4 @@ Resultados locais:
 - Propriedade do volume migrada para UID/GID 1000; banco atual e backups confirmados como `node:node`.
 - API e worker publicados como `uid=1000(node)`; escrita e remoção de arquivo temporário no volume foram bem-sucedidas.
 - API, Nginx e worker permaneceram saudáveis e sem exceções nos logs; healthcheck público respondeu `200`.
+- GitHub Actions do PR #37: checks `Backend` e `Frontend and infrastructure` concluídos com sucesso.
