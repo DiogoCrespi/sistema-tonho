@@ -498,3 +498,4 @@ Resultados locais:
 - Tabela e índices `audit_logs_actor_created_idx` e `audit_logs_action_created_idx` confirmados; tabela iniciou vazia como esperado.
 - API e Nginx permaneceram saudáveis, worker iniciou sem exceções e healthcheck público respondeu `200`.
 - Consulta pública de auditoria sem sessão respondeu `401`, conforme esperado.
+- GitHub Actions do PR #38: checks `Backend` e `Frontend and infrastructure` concluídos com sucesso.
