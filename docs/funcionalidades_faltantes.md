@@ -163,3 +163,32 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
     1.  **Endpoint de Versão**: Criar rota `GET /api/version` que retorna o hash de commit Git ou versão atual (ex: `{"version": "1.0.4"}`).
     2.  **Polling / Interceptor de Erro**: O frontend faz uma verificação periódica de hora em hora (ou lê o header de versão `X-App-Version` anexado a todas as respostas HTTP da API). Ao detectar uma mudança de versão, exibe um banner ou toast persistente: *"Nova versão disponível! Clique aqui para recarregar."*, forçando o recarregamento do navegador (`window.location.reload(true)`) para limpar o cache de bundles JavaScript.
 
+---
+
+## 7. Empacotamento e Compilação da Versão Mobile (APK / App Nativo)
+
+### 7.1. Wrapper Híbrido Nativo com Capacitor
+*   **Problema**: O sistema foi concebido como uma aplicação web Vanilla. Para ser distribuído nas lojas de aplicativos (Google Play Store) e executado como um aplicativo nativo (`.apk` no Android), os recursos do frontend precisam ser empacotados em um contêiner nativo.
+*   **Requisitos**:
+    1.  **Integração do Capacitor**: Instalar a CLI do Capacitor (`@capacitor/core` e `@capacitor/cli`) e inicializar o projeto mobile mapeando o diretório de arquivos estáticos (`--web-dir=frontend`).
+    2.  **Plataforma Android**: Adicionar a plataforma nativa do Android (`npx cap add android`) e usar o Android Studio para compilação e assinatura do arquivo `.apk` ou `.aab` de produção.
+
+### 7.2. Resolução Dinâmica de Base URL da API
+*   **Problema**: Em navegadores web, caminhos relativos (Ex: `/api/auth/login`) resolvem automaticamente para o host da página. Em uma aplicação híbrida (APK), os arquivos estáticos são servidos a partir de um protocolo local (`http://localhost` no Android ou `capacitor://localhost` no iOS). Sem uma URL base fixa, as requisições falham ao tentar acessar recursos locais inexistentes.
+*   **Requisitos**:
+    1.  **Identificação de Ambiente**: O utilitário `API` no frontend JavaScript deve detectar se o app está rodando em ambiente híbrido (ex: verificando a existência de `window.Capacitor`).
+    2.  **Base URL Condicional**: Se for detectado ambiente mobile/híbrido nativo, prefixar todas as chamadas HTTP com a URL absoluta do servidor em produção (ex: `https://tonho.personaltonho.online/api`), caso contrário, manter o uso de caminhos relativos.
+
+### 7.3. Liberação de CORS para Origens Locais do WebView
+*   **Problema**: O backend Express bloqueia requisições vindas de origens desconhecidas por segurança contra acessos cross-origin não autorizados. Os WebViews nativos do Android e iOS enviam cabeçalhos de origem locais.
+*   **Requisitos**: No arquivo de segurança de cabeçalhos do backend (`httpSecurity.js`), adicionar as origens padrões dos WebViews na lista de permissões do CORS (CORS Whitelist):
+    *   `http://localhost` (WebView Android)
+    *   `capacitor://localhost` (WebView iOS/Capacitor)
+
+### 7.4. Gerenciamento de Armazenamento Seguro no Dispositivo
+*   **Problema**: Cookies HTTP-Only com flag `Secure` e `SameSite` não são gerenciados de forma consistente por WebViews nativos em algumas versões do Android, o que pode quebrar a persistência da sessão JWT ao fechar o app.
+*   **Requisitos**:
+    1.  **Capacitor Secure Storage**: Se rodando em APK nativo, contornar o uso de cookies substituindo pelo armazenamento de credenciais via plugin nativo `@capacitor-community/secure-storage` (criptografia em nível de hardware/Keystore do dispositivo).
+    2.  **Cabeçalho Authorization**: Passar o token JWT explicitamente no cabeçalho `Authorization: Bearer <token>` nas requisições da API quando em modo mobile nativo.
+
+
