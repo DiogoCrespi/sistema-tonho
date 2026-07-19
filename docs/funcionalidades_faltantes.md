@@ -37,7 +37,14 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 ### 1.6. Rate Limit Combinado por IP e Conta
 *   **Requisitos**: Aplicar regras de limitação combinando a chave de IP com o endereço de e-mail/conta do usuário para impedir ataques distribuídos de brute force contra credenciais.
 
+### 1.7. Waivers, PAR-Q e Assinatura Eletrônica de Termos (Conformidade Jurídica)
+*   **Problema**: Risco de responsabilidade civil ou judicial do Personal Trainer e da plataforma em decorrência de lesões corporais, sobrecargas musculares ou incidentes médicos durante execuções de treinos sem salvaguardas contratuais explícitas.
+*   **Requisitos**:
+    1.  **Questionário PAR-Q**: Preenchimento obrigatório do questionário de aptidão física (PAR-Q) antes do primeiro treino.
+    2.  **Isenção de Responsabilidade**: Assinatura e aceitação eletrônica de termos de uso e isenção de responsabilidade (*waivers*) com registro imutável do IP, data/hora e versão dos termos assinados pelo aluno.
+
 ---
+
 
 ## 2. Riscos de Infraestrutura, Persistência e Deploy
 
@@ -229,12 +236,23 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 *   **Requisitos**:
     1.  **Gatilhos de Ausência**: Motores de busca diária na base de dados que disparam notificações ou geram tarefas no painel do Personal Trainer se o aluno correspondente não logar treinos por mais de 5 dias consecutivos.
     2.  **Pesquisas de NPS**: Disparador automatizado de pesquisas de satisfação líquida (Net Promoter Score) ao encerramento de cada macrociclo de treinamento periodizado.
+    3.  **Broadcast Segmentado & Agendamento**: Ferramentas para o Personal enviar avisos e mensagens em lote para subgrupos de alunos (ex: "Todos os inativos") e agendar despachos automáticos de recados e tarefas.
 
 ### 4.17. Agendamentos Avançados e Check-ins Geolocalizados
 *   **Problema**: Agendamentos manuais desorganizados e fraudes de presença/check-in em treinos presenciais.
 *   **Requisitos**:
     1.  **Geofencing**: Validar check-in do aluno presencial por aproximação geográfica baseada em GPS/satélite ou conexão ativa a roteadores Wi-Fi cadastrados da academia de locação de horários.
     2.  **Sincronização**: Integração bidirecional com Google Calendar e Apple Calendar para evitar sobreposições horárias de agendas e aplicação de políticas de reembolso/cálculo de crédito sob cancelamentos de última hora.
+
+### 4.18. Check-in de Prontidão Diário (Readiness Check-in)
+*   **Problema**: Risco de lesões, overtraining ou baixo rendimento ao prescrever e iniciar rotinas pesadas sem mensurar a condição física atual do aluno naquele dia.
+*   **Requisitos**:
+    1.  **Avaliação Subjetiva Rápida**: Tela rápida opcional antes de iniciar a sessão ativa solicitando escalas de 1 a 5 para: dor muscular tardia (DOMS), fadiga geral, qualidade de sono anterior, humor e prontidão geral (readiness).
+    2.  **Ajuste de Intensidade**: O sistema avisa o Personal Trainer se a prontidão estiver muito baixa, sugerindo autorregulações no treino.
+
+### 4.19. Centro de Preferências de Notificações
+*   **Problema**: Envio de mensagens e lembretes gerando ruído de comunicação e cansaço de notificações (churn por fadiga).
+*   **Requisitos**: Tela para o usuário (tanto Personal quanto Aluno) marcar quais canais (E-mail, WhatsApp, Push) deseja utilizar para cada tipo de notificação (novos treinos, mensagens de chat, cobranças, etc.).
 
 ---
 
@@ -251,7 +269,14 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 ### 5.3. Gerenciamento de Sessões por Dispositivo
 *   **Requisitos**: Substituir JWT stateless absoluto por controle de sessões ativas na tabela `user_sessions`, permitindo que o usuário visualize e encerre sessões em outros navegadores ou aparelhos de forma granular.
 
+### 5.4. Backoffice Operacional (Suporte e Impersonation Seguro)
+*   **Problema**: Operadores de suporte nível 3 necessitam inspecionar bugs relatados por usuários finais na interface, mas solicitar senhas temporárias infringe as regras mais básicas de segurança e sigilo de dados.
+*   **Requisitos**:
+    1.  **Impersonation**: Rota restrita no backend permitindo a administradores autorizados visualizar temporariamente a interface sob o perfil do usuário reclamante.
+    2.  **Audit Trail**: Toda sessão de impersonation exige a inserção de justificativa formal associada a um ticket, gerando logs de auditoria imutáveis com alertas automáticos em canais de conformidade.
+
 ---
+
 
 ## 6. Plano de Testes Mínimo Obrigatório
 
