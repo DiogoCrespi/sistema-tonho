@@ -99,7 +99,14 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 ### 3.5. Controle de Concorrência nas Edições (Optimistic Locking)
 *   **Requisitos**: Adicionar as colunas `updated_at` e `version` (INTEGER) nos registros modificáveis. O frontend deve enviar o cabeçalho `If-Match: <versao_atual>`. Caso haja divergência no banco de dados, retornar `409 Conflict`, evitando sobrescritas acidentais de outros instrutores.
 
+### 3.6. Periodização Biomecânica e Estimador de Repetição Máxima (1-RM)
+*   **Problema**: A maioria das prescrições digitais é estática, sem suporte a oscilações de volume e intensidade (periodização ondulatória ou em blocos) ou à prescrição fina de tempo sob tensão.
+*   **Requisitos**:
+    1.  **Tempo Sob Tensão**: Permitir prescrição de cadência por exercício (tempo em segundos para as fases excêntrica, isométrica e concêntrica do movimento).
+    2.  **Sugestão de Sobrecarga**: Motor algorítmico que calcula a estimativa de 1-RM baseada no log de carga e repetições reais enviados pelo aluno. O sistema sugere acréscimos inteligentes e fisiologicamente seguros na carga dos exercícios para os ciclos subsequentes.
+
 ---
+
 
 ## 4. Lógica de Negócio, Resiliência e Operação
 
@@ -184,6 +191,50 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 
 ### 4.10. Indicador de "Digitando..." no Chat
 *   **Requisitos**: Eventos efêmeros SSE (`typing`) enviados a partir do trigger `oninput` no frontend via requisição rápida `POST /api/chat/typing` (com limitador de debounce).
+
+### 4.11. Ciclo de Inativação e Filtragem de Alunos
+*   **Problema**: A listagem inicial do Personal Trainer retorna todos os alunos cadastrados. Com o tempo, a tela inicial ficará poluída com dezenas de alunos antigos/inativos.
+*   **Requisitos**:
+    1.  Adicionar botão "Inativar Aluno" no modal de detalhes (bloqueando o acesso do aluno ao sistema) e abas de filtragem na tela inicial ("Ativos" / "Inativos").
+
+### 4.12. Isolamento de Tenant (Multi-Tenancy) e Controle de Cobrança
+*   **Problema**: Personais inadimplentes continuam utilizando a plataforma sem qualquer restrição para si ou seus alunos vinculados.
+*   **Requisitos**:
+    1.  Criar tabela `subscriptions` vinculada à conta do Personal (`user_id`).
+    2.  Adicionar middleware de validação financeira que verifica a validade da assinatura do Personal. Em caso de expiração, a API retorna `402 Payment Required`, bloqueando rotas modificadoras do Personal Trainer e impedindo alunos vinculados a ele de acessar suas fichas.
+
+### 4.13. Gestão de Equipes e Hierarquias Multiníveis (Clínicas e Assessorias)
+*   **Problema**: Relações simples um-para-muitos (um Personal para alunos) impedem micro-agências, stúdios ou clínicas multidisciplinares de escalar operações em equipe.
+*   **Requisitos**:
+    1.  **Estrutura de Equipe**: Mapeamento de papéis como "Head Trainer" / Coordenador e Treinadores Juniores/Associados. O coordenador pode supervisionar e delegar alunos para juniores.
+    2.  **Bibliotecas Compartilhadas**: Centralização de metodologias padronizadas; as bibliotecas de exercícios e as capturas videográficas instrucionais precisam poder ser curadas exclusivamente pela coordenação global e, então, instanciadas em permissões somente leitura nos portfólios visíveis pela equipe associada.
+    3.  **Migrações em Lote**: Em caso de demissões ou licenças de treinadores, o sistema deve migrar em lote as carteiras de alunos para outros instrutores da mesma organização, preservando logs, fotos de progresso e anotações clínicas intactas sob o ID da nova autoria.
+    4.  **Rateio de Comissões**: Algoritmo de split de faturamento integrado a gateways para repassar comissões dinâmicas aos treinadores juniores antes da liquidação na conta do coordenador.
+
+### 4.14. Integração Multiprofissional e Perfis de Parceiros Terceiros
+*   **Problema**: Educadores físicos são vedados por conselhos regulatórios de prescrever dietas, calibrações de macronutrientes ou prontuários médicos.
+*   **Requisitos**:
+    1.  **Perfis de Parceiros**: Criar contas e painéis restritos para Nutricionistas, Fisioterapeutas e Endocrinologistas.
+    2.  **Consentimento e Compartilhamento**: Mediante consentimento eletrônico explícito emitido pelo aluno em conformidade com as leis de privacidade, esses parceiros ganham acesso read-only ao histórico de treinos e cargas do aluno, e podem atachar laudos médicos, exames digitalizados e planos nutricionais em PDF diretamente no prontuário unificado do aluno.
+    3.  **Rastreador de Hábitos Saudáveis**: Módulos complementares para checklists diários de consumo hídrico básico e margens elementares de macronutrientes recomendados (dentro dos limites de orientação não-clínica permitida).
+
+### 4.15. Integração Passiva com Sensores Vestíveis (Wearables)
+*   **Problema**: Aferição de consistência dependente unicamente de digitação manual subjetiva dos dados pelo aluno sob fadiga.
+*   **Requisitos**:
+    1.  **APIs de Saúde**: Desenvolver adaptadores para sincronização assíncrona com as APIs do Apple HealthKit, Google Fit/Health Connect e Garmin.
+    2.  **Análise de Recuperação**: Coleta de logs diários de frequência cardíaca de repouso, variabilidade cardíaca (HRV) e horas de sono profundo para calcular e sugerir autorregulação da intensidade de treino diária (central de estresse fisiológico basal), sinalizando alertas ao treinador.
+
+### 4.16. Motores de Engajamento CRM e Prevenção de Churn
+*   **Problema**: Falta de proatividade no resgate de alunos que abandonam o programa.
+*   **Requisitos**:
+    1.  **Gatilhos de Ausência**: Motores de busca diária na base de dados que disparam notificações ou geram tarefas no painel do Personal Trainer se o aluno correspondente não logar treinos por mais de 5 dias consecutivos.
+    2.  **Pesquisas de NPS**: Disparador automatizado de pesquisas de satisfação líquida (Net Promoter Score) ao encerramento de cada macrociclo de treinamento periodizado.
+
+### 4.17. Agendamentos Avançados e Check-ins Geolocalizados
+*   **Problema**: Agendamentos manuais desorganizados e fraudes de presença/check-in em treinos presenciais.
+*   **Requisitos**:
+    1.  **Geofencing**: Validar check-in do aluno presencial por aproximação geográfica baseada em GPS/satélite ou conexão ativa a roteadores Wi-Fi cadastrados da academia de locação de horários.
+    2.  **Sincronização**: Integração bidirecional com Google Calendar e Apple Calendar para evitar sobreposições horárias de agendas e aplicação de políticas de reembolso/cálculo de crédito sob cancelamentos de última hora.
 
 ---
 
