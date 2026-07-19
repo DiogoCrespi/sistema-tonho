@@ -118,3 +118,140 @@ Este documento consolidado apresenta todos os requisitos e funcionalidades ident
     *   *Descrição*: Armazenamento criptografado nativo de chaves/JWT no Keystore/Keychain através do Capacitor Secure Storage.
 *   [ ] **Compilação e Wrapper Híbrido (Capacitor)** `[Prioridade: 7/10]`
     *   *Descrição*: Instalação, configuração da plataforma Android e compilação do arquivo de release `.apk`.
+
+---
+
+## Planos de Ação e Etapas de Implementação Detalhadas
+
+Esta seção detalha o plano de execução para cada grupo de prioridades, divididos por fases técnicas de desenvolvimento, incluindo modificações de banco de dados, assinaturas de rotas de API, código e testes recomendados.
+
+---
+
+### FASE 1: HARDENING DE SEGURANÇA E ACESSO (P0 - Prioridades 9 e 10)
+
+#### Bloco A: IDOR & Validação de Vínculo de Alunos
+*   **Problema**: Personais conseguem acessar dados de alunos de outros personais manipulando o `:id` do aluno nas URLs da API.
+*   **Etapas de Implementação**:
+    1.  **Criar Middleware de Vínculo**: Escrever `validateStudentOwnership` em `backend/src/middleware/validateStudentOwnership.js`.
+    2.  **Consulta SQL no Middleware**: O middleware intercepta a rota, lê o `student_id` do parâmetro da rota (ou do payload JSON) e o `personal_id` da sessão JWT. Consulta a tabela `student_profiles` verificando se o vínculo confere e se o status do vínculo não é `blocked`.
+    3.  **Bloqueio Criptográfico**: Se não houver relacionamento ativo, aborta a requisição com `403 Forbidden` e registra um log de segurança na auditoria.
+    4.  **Acoplamento**: Integrar o middleware nas rotas Express de treinos, medições, chat e anamnese.
+*   **Validação/Testes**:
+    *   *Teste de Integração*: Simular requisição do Personal A tentando obter a lista de treinos de um Aluno vinculado ao Personal B. Assertiva: Status da resposta deve ser `403`.
+
+#### Bloco B: Onboarding de Alunos e Primeiro Acesso Seguro
+*   **Problema**: Personais definem senhas de alunos de forma rudimentar, e não há troca obrigatória de credenciais temporárias.
+*   **Etapas de Implementação**:
+    1.  **Migração de Coluna**: Adicionar a coluna `must_change_password` (BOOLEAN, default TRUE) na tabela `users`.
+    2.  **Tabela de Convites**: Criar a tabela `student_invitations` com colunas `id`, `email`, `personal_id`, `onboarding_token` (UUID hash), `expires_at` e `claimed_at`.
+    3.  **Endpoint de Criação**: Substituir a rota `/api/personal/students` (que criava o aluno com senha estática) para gerar o token e enviar um convite transacional (SMTP/Resend) apontando para `#/onboarding?token=UUID`.
+    4.  **Tela de Troca de Senha**: No login, se o backend retornar `must_change_password: true`, o frontend redireciona o fluxo para um modal bloqueante forçando o cadastramento de uma senha definitiva (mínimo 10 caracteres).
+*   **Validação/Testes**:
+    *   *Teste de Integração*: Tentar logar com credencial provisória. Confirmar se a propriedade `must_change_password` é retornada no JSON.
+
+#### Bloco C: Persistência de Dados e Volumes Docker
+*   **Problema**: Containers Docker são efêmeros; comandos de desligamento destróem a base física de dados e avatares carregados.
+*   **Etapas de Implementação**:
+    1.  **Ajuste de Paths**: Verificar no `backend/src/index.js` se os caminhos de uploads e banco de dados buscam variáveis de ambiente (ex: `DATABASE_PATH=/app/data/database.sqlite` e `UPLOADS_PATH=/app/uploads`).
+    2.  **Configuração de Volumes**: No arquivo [docker-compose.yml](file:///c:/Nestjs/sistema-tonho/docker-compose.yml), declarar os volumes persistentes:
+        ```yaml
+        services:
+          app:
+            volumes:
+              - sqlite_data:/app/data
+              - uploads_data:/app/uploads
+        volumes:
+          sqlite_data:
+          uploads_data:
+        ```
+    3.  **Permissões de Acesso**: Assegurar no `Dockerfile` que o comando `chown -R node:node /app` dê permissões de leitura/escrita para a execução em modo não-root.
+*   **Validação/Testes**:
+    *   *Teste de Resiliência*: Subir o ambiente, cadastrar um aluno, rodar `docker compose down`, reiniciar os containers com `docker compose up -d` e validar se o registro persiste.
+
+#### Bloco D: Chaves de Cadastro CLI e Controle de Adesão
+*   **Problema**: Cadastros de novos Personais na rota `/api/auth/register` necessitam de proteção por chaves convite controladas para limitar o acesso a usuários pagantes.
+*   **Etapas de Implementação**:
+    1.  **Tabela de Chaves**: Criar a tabela `registration_keys` no banco de dados (`key_hash`, `personal_id_claimed`, `expires_at`, `claimed_at`, `max_uses`, `uses_count`).
+    2.  **Scripts CLI**: Escrever arquivos na pasta `backend/src/scripts/accessKey.js`:
+        *   `access-key:create --uses=1 --expiry=30d` (Gera string randômica de chave e guarda o hash no SQLite).
+        *   `access-key:list` (Exibe tabela com status das chaves).
+        *   `access-key:revoke --key=<token>` (Inativa o token).
+    3.  **Middleware de Validação**: Na rota `POST /api/auth/register`, exigir o campo `registrationKey`. O backend valida a vigência e incrementa o uso na tabela antes de criar o usuário.
+*   **Validação/Testes**:
+    *   *Teste E2E*: Cadastrar um Personal com chave inexistente ou já esgotada. Assertiva: Retorno `400 Bad Request`.
+
+---
+
+### FASE 2: CORE DE EXECUÇÃO E PERSISTÊNCIA DE DADOS (P0 - Prioridades 9 e 10)
+
+#### Bloco E: Execução Real de Treino (Workout Sessions & Logs)
+*   **Problema**: Marcação de conclusão é guardada apenas no `localStorage` do aluno, omitindo cargas, séries e repetições executadas do Personal Trainer.
+*   **Etapas de Implementação**:
+    1.  **Criação de Migration**: Criar tabelas `workout_sessions` e `exercise_logs` mapeando o histórico transacional da sessão.
+    2.  **Endpoints da API**:
+        *   `POST /api/sessions/start` -> Inicia sessão. Cria registro `workout_sessions` com status `started` e retorna o ID da sessão.
+        *   `POST /api/sessions/:sessionId/log` -> Recebe dados de execução de uma série específica do exercício (carga real, repetições, concluído, RPE e observações) e grava no `exercise_logs`.
+        *   `POST /api/sessions/:sessionId/finish` -> Altera o status da sessão para `completed` e calcula a duração total em segundos.
+    3.  **Modificação no Frontend do Aluno**: Na tela de execução móvel, substituir a manipulação de `localStorage` para disparar as chamadas à API em tempo de execução.
+*   **Validação/Testes**:
+    *   *Teste de Integração*: Simular a sequência de requisições de início de treino, logs de dois exercícios, e encerramento de sessão, validando se os registros de progresso aparecem corretos no banco.
+
+#### Bloco F: Estados de Publicação da Ficha de Treino
+*   **Problema**: Fichas em elaboração ficam imediatamente visíveis aos alunos, poluindo a visualização e gerando erros.
+*   **Etapas de Implementação**:
+    1.  **Adicionar Campo de Status**: Coluna `status` (VARCHAR: `'draft'`, `'published'`, `'archived'`) na tabela `workouts`.
+    2.  **Controle de Leitura do Aluno**: Na rota `GET /api/workouts`, filtrar para retornar apenas os treinos do aluno cujo status seja `'published'`.
+    3.  **Processo de Publicação**: No painel do Personal, ao acionar o botão "Publicar Ficha", a API executa uma transação:
+        *   Muda status da ficha atual para `'published'`.
+        *   Muda status das fichas de treino antigas do mesmo aluno de `'published'` para `'archived'`.
+*   **Validação/Testes**:
+    *   *Teste de API*: Validar se a rota do aluno omite fichas marcadas como `'draft'`.
+
+#### Bloco G: Contenção de escrita e Safe Backups
+*   **Problema**: Copiar fisicamente o arquivo SQLite enquanto conexões de chat SSE geram transações causa backups corrompidos.
+*   **Etapas de Implementação**:
+    1.  **Refatoração do script de backup**: Editar o script `backend/src/scripts/dbBackup.js`. Substituir a cópia física direta (`fs.copyFile`) pela execução segura da query nativa `VACUUM INTO 'caminho/do/backup.sqlite'` do SQLite, chamando a transação atômica pelo Knex.
+    2.  **Configuração de Retenção no Worker**: Mapear a leitura da variável `BACKUP_RETENTION` para garantir que apenas os 7 backups mais recentes automáticos permaneçam no volume `/app/data/backups/`.
+*   **Validação/Testes**:
+    *   *Teste Automatizado*: Rodar `npm run db:backup` e verificar se a integridade do arquivo gerado passa na validação `PRAGMA integrity_check;`.
+
+---
+
+### FASE 3: UX/UI E PRODUTIVIDADE OPERACIONAL (P1 - Prioridades 7 e 8)
+
+#### Bloco H: Paginação e Virtual Scrolling
+*   **Etapas de Implementação**:
+    1.  **Paginação de Chat**: Rota `GET /api/chat/:userId` recebe os query parameters `before` (ID da última mensagem no client) e `limit` (default 50). O Knex realiza a busca filtrando com `WHERE id < before ORDER BY id DESC LIMIT 50`.
+    2.  **Virtual Scrolling no Catálogo**: No arquivo [frontend/js/catalog.js](file:///c:/Nestjs/sistema-tonho/frontend/js/catalog.js), implementar listener de scroll no contêiner. Calcular a altura dos elementos e renderizar dinamicamente apenas os cartões que cruzam a viewport visible mais um buffer de segurança, evitando sobrecarga do navegador.
+
+#### Bloco I: Timezones e Fuso Horário Local
+*   **Etapas de Implementação**:
+    1.  **Escrita Estrita UTC**: Certificar que o Knex salve todas as instâncias de `CURRENT_TIMESTAMP` ou `new Date()` como strings ISO UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`).
+    2.  **Tratamento no Frontend**: No arquivo de utilitários do cliente (`frontend/js/utils.js`), escrever a função `formatToLocalDate(utcString)` que parseia a string UTC e retorna o padrão regional usando `Intl.DateTimeFormat(navigator.language, { dateStyle: 'short', timeStyle: 'short' })`.
+
+#### Bloco J: Limpeza de Mídias e fs.unlink
+*   **Etapas de Implementação**:
+    1.  **Eventos de Exclusão**: No controller de catálogos e uploads, interceptar requisições de exclusão física ou substituição de imagens de exercícios e avatares.
+    2.  **Varredura Física**: Ler o path do arquivo gravado no banco de dados e acionar a biblioteca nativa `fs.promises.unlink(filePath)` dentro de um bloco try-catch. Se o arquivo físico não for encontrado (ex: erro `ENOENT`), prosseguir com o delete do banco sem travar a requisição.
+
+---
+
+### FASE 4: COMPILAÇÃO E DISTRIBUIÇÃO MOBILE APK (P1 - Prioridades 7 e 8)
+
+#### Bloco L: Capacitor Wrapper e URLs Dinâmicas
+*   **Etapas de Implementação**:
+    1.  **Instalação**: Executar `npm install @capacitor/core @capacitor/cli` na raiz e configurar o projeto com `npx cap init`. Definir `--web-dir=frontend`.
+    2.  **API URL Resolver**: Criar um arquivo `frontend/js/apiConfig.js` que exporta a URL base da API:
+        ```javascript
+        export const API_BASE_URL = window.Capacitor 
+          ? "https://tonho.personaltonho.online/api" 
+          : "/api";
+        ```
+    3.  **Adicionar Plataforma**: Instalar e acionar plataforma Android (`npm install @capacitor/android && npx cap add android`).
+    4.  **Compilação**: Rodar `npx cap sync` para transferir os códigos HTML/CSS/JS locais do frontend para a pasta do Gradle. Abrir em Android Studio e compilar o APK via menu *Build > Build Bundle(s) / APK(s) > Build APK(s)*.
+
+#### Bloco M: CORS para WebViews e Secure Storage
+*   **Etapas de Implementação**:
+    1.  **Whitelisting CORS**: No arquivo de segurança HTTP da API Express, liberar a aceitação de cabeçalhos de origem vindos do emulador/dispositivo nativo: `http://localhost` e `capacitor://localhost`.
+    2.  **Segregação de Sessão**: Se rodando nativamente no app, substituir a leitura/gravação de tokens JWT de cookies HTTP-Only para cabeçalhos HTTP explicitamente setados (`Authorization: Bearer <token>`). O token é gravado e obtido de forma criptografada usando o plugin `@capacitor-community/secure-storage` para impedir acessos ao Keychain local do Android/iOS.
+
