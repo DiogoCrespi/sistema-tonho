@@ -43,7 +43,7 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 
 ### 2.1. Perda de Dados em Containers (Ephemeral Storage)
 *   **Problema**: O banco fica em `/app/data/database.sqlite` e os avatares em `backend/uploads/avatars/`. Containers Docker são efêmeros por padrão. Comandos como `docker compose down` ou crashes podem destruir o banco inteiro e todas as imagens de avatar.
-*   **Requisitos**: No arquivo `docker-compose.yml`, mapear volumes nomeados (named volumes) persistidos no host.
+*   **Requisitos**: No arquivo `docker-compose.yml`, é obrigatório declarar e mapear volumes nomeados (named volumes) persistidos no host:
     ```yaml
     volumes:
       - sqlite_data:/app/data
@@ -64,6 +64,16 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 *   **Problema**: Necessidade de garantir a integridade dos dados sob crashes físicos.
 *   **Requisitos**: Rotina diária unificada empacotando a cópia consistente do `database.sqlite` e a pasta `/uploads` (com retenção de 7 backups diários, 4 semanais e 1 mensal), com disparo automático antes de migrações.
 
+### 2.5. Bloqueio de Upload pelo Nginx (Erro HTTP 413)
+*   **Problema**: A validação do frontend permite arquivos de imagem de até 5 MB. Contudo, o servidor Nginx possui um limite padrão embutido de 1 MB para o corpo da requisição (`client_max_body_size`). Qualquer tentativa de upload de um avatar ou exercício acima de 1 MB será abortada pelo proxy reverso antes de chegar à aplicação Node.js, retornando o erro *413 Payload Too Large*.
+*   **Requisitos**: Adicionar a diretiva `client_max_body_size 10M;` nos blocos `http` ou `server` do arquivo de configuração [nginx.conf](file:///c:/Nestjs/sistema-tonho/nginx.conf).
+
+### 2.6. Esgotamento de Conexões SSE no Navegador (Gargalo HTTP/1.1)
+*   **Problema**: O sistema depende de Server-Sent Events (SSE) para o chat em tempo real. O protocolo HTTP/1.1 impõe um limite estrito no navegador de, no máximo, 6 conexões persistentes simultâneas por domínio. Se o usuário abrir 7 abas diferentes no desktop, a 7ª aba travará indefinidamente tentando conectar ao `/api/chat/stream`.
+*   **Requisitos**:
+    1.  **Multiplexação via HTTP/2**: Habilitar explicitamente o suporte a **HTTP/2** nas configurações de escuta do Nginx e no painel do Cloudflare Tunnel, permitindo centenas de conexões lógicas sobre a mesma porta TCP física.
+    2.  **Frontend SharedWorker (Opcional)**: Implementar um `SharedWorker` no JavaScript do frontend para gerenciar e manter uma única conexão SSE persistente com a API, distribuindo os eventos entre as diferentes abas abertas pelo mesmo navegador.
+
 ---
 
 ## 3. Gargalos de Desempenho e UX (Frontend/Backend)
@@ -78,9 +88,12 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 *   **Problema**: Se o servidor Docker rodar em UTC (padrão) e um aluno registrar o peso às 22h no horário de Brasília, o servidor registrará no SQLite como 01h do dia seguinte, distorcendo o histórico biométrico do aluno.
 *   **Requisitos**: O banco de dados (SQLite) deve armazenar todas as datas em padrão ISO 8601 UTC (ex: `2026-07-19T19:00:00Z`). A conversão para fuso horário local deve ocorrer estritamente no frontend do navegador usando a API nativa `Intl.DateTimeFormat`.
 
-### 3.3. Bloqueio de Imagens Base64 no Banco de Dados
-*   **Problema**: O envio de payloads Base64 de imagens de exercícios não deve ser armazenado como string Base64 diretamente no banco de dados, pois isso incha o SQLite, degradando o desempenho de leitura de tabelas indexadas.
-*   **Requisitos**: O Express converte o payload Base64 recebido para WebP, salva o arquivo físico na pasta persistida (volume Docker) e grava **apenas o caminho relativo do arquivo** na coluna do banco de dados (ex: `/uploads/exercises/id.webp`).
+### 3.3. Bloqueio de Imagens Base64 no Banco e Arquivos Órfãos
+*   **Problema**: O envio de payloads Base64 de imagens de exercícios não deve ser armazenado como string Base64 diretamente no banco de dados, pois isso incha o SQLite, degradando o desempenho. Além disso, a deleção física de avatares ou exercícios customizados no banco sem apagar o respectivo arquivo no disco gera acúmulo progressivo de arquivos de mídia órfãos no volume Docker, esgotando o espaço do servidor.
+*   **Requisitos**:
+    1.  **Escrita Física**: O Express converte o payload Base64 recebido para WebP, salva o arquivo físico na pasta persistida (volume Docker) e grava **apenas o caminho relativo do arquivo** na coluna do banco de dados (ex: `/uploads/exercises/id.webp`).
+    2.  **Limpeza no Delete**: Acoplar a deleção no banco de dados a chamadas de remoção física de arquivos (`fs.unlink()` ou equivalente) tanto na atualização/exclusão de avatares quanto na exclusão de exercícios customizados (`DELETE /api/catalog/exercises/:id`).
+
 
 ### 3.4. Controle de Cache no Nginx e Cache Busting
 *   **Problema**: Novos deploys do frontend podem fazer navegadores de usuários usarem arquivos JavaScript e CSS velhos armazenados em cache local, gerando quebras de integração com a API atualizada.
@@ -127,6 +140,30 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 
 ### 4.8. Autoria e Validação de Medições
 *   **Requisitos**: Identificar quem lançou a medida (`recorded_by_user_id`), data de ocorrência retroativa (`measurement_date`), e controle de edição de erros.
+
+### 4.9. Edição e Exclusão de Mensagens no Chat
+*   **Problema**: Mensagens trocadas no chat não podem ser alteradas ou excluídas. Erros de digitação ou envio de fichas/planilhas incorretas são permanentes.
+*   **Requisitos**:
+    1.  **Edição**: Rota `PUT /api/chat/:messageId` permitindo alterar o conteúdo da mensagem (exibindo um indicador visual de *(editado)* ao lado da bolha de texto).
+    2.  **Exclusão**: Rota `DELETE /api/chat/:messageId` que remove fisicamente ou marca o conteúdo como excluído, substituindo o texto visualmente por *"Mensagem apagada"* no frontend para preservar o fluxo de conversa.
+
+### 4.10. Indicador de "Digitando..." em Tempo Real
+*   **Problema**: Falta de feedback presencial. O usuário não sabe se o interlocutor está escrevendo uma mensagem.
+*   **Requisitos**:
+    1.  **Frontend**: Monitorar o evento `oninput` no campo de texto de envio e disparar uma requisição `POST /api/chat/typing` com limitador de chamadas (debounce de 3 segundos).
+    2.  **Backend**: Disparar um evento leve e efêmero via stream SSE para o destinatário (`event: typing`). Ao receber o evento, o frontend exibe uma animação de digitação ("...") por 3 segundos.
+
+### 4.11. Ciclo de Inativação e Filtragem de Alunos
+*   **Problema**: A listagem inicial do Personal Trainer retorna todos os alunos cadastrados na história da conta. Com o tempo, a tela inicial ficará poluída com dezenas de alunos inativos ou antigos.
+*   **Requisitos**:
+    1.  **Status do Aluno**: Adicionar campo de controle `status` (`'active'`, `'inactive'`) na tabela de perfis de alunos.
+    2.  **Frontend**: Adicionar botão "Inativar Aluno" no modal de detalhes (bloqueando o acesso do aluno ao sistema) e um controle de abas de filtragem na tela inicial ("Ativos" / "Inativos") para ocultar os alunos antigos por padrão.
+
+### 4.12. Isolamento de Tenant (Multi-Tenancy) e Controle de Cobrança
+*   **Problema**: Não há controle de acesso comercial/financeiro. Personais inadimplentes ou com contas suspensas continuam utilizando a plataforma sem qualquer restrição para si ou seus alunos vinculados.
+*   **Requisitos**:
+    1.  **Tabela de Assinaturas**: Criar tabela `subscriptions` vinculada à conta do Personal (`user_id`).
+    2.  **Middleware de Assinatura**: Adicionar middleware de validação financeira que verifica o status e validade da assinatura do Personal. Em caso de expiração, a API retorna `402 Payment Required`, bloqueando rotas modificadoras do Personal Trainer e impedindo alunos vinculados a ele de acessar suas fichas.
 
 ---
 
