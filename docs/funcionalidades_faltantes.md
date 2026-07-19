@@ -134,3 +134,32 @@ Este documento detalha as lacunas identificadas no ciclo de uso, consistência d
 
 ### 5.1. Conformidade com LGPD
 *   **Requisitos**: Termo de consentimento de tratamento de dados de saúde no primeiro acesso do aluno, rota de exportação em JSON e mecanismos para exclusão definitiva com anonimização (removendo colunas pessoais e preservando apenas métricas agregadas).
+
+---
+
+## 6. Processo de Deploy e Sistema de Atualizações em Produção
+
+### 6.1. Migrações de Banco de Dados Automatizadas e Seguras
+*   **Problema**: Em ambientes de produção com banco local SQLite montado em volume persistente, deploys de código novo que exigem mudanças de esquema (migrations) podem falhar ou gerar inconsistências se executados concorrentemente com o tráfego da API.
+*   **Requisitos**:
+    1.  **Release Phase / Init Container**: O script de inicialização do Docker (`Docker entrypoint`) deve executar `knex migrate:latest` de forma serial antes do servidor da API principal iniciar a escuta na porta TCP.
+    2.  **Transações e Migrações Retrocompatíveis**: Toda migração deve ser transacional e projetada para ser retrocompatível (Ex: nunca remover ou alterar tipos de colunas ativas imediatamente; primeiro adicionar a nova coluna como nula, migrar os dados em background via script e apenas em um deploy futuro remover a coluna antiga).
+
+### 6.2. Snapshot de Segurança Pré-Deploy (Backup e Rollback)
+*   **Problema**: Uma migração corrompida ou com falha pode inutilizar o arquivo SQLite persistido no volume Docker em produção.
+*   **Requisitos**: O script de entrypoint do container deve efetuar uma cópia física segura (`database.sqlite.bak`) antes de rodar `knex migrate:latest`. Em caso de falha da migração (código de saída não-zero), o script deve restaurar o snapshot automaticamente e abortar o deploy, mantendo a versão anterior ativa.
+
+### 6.3. Atualização de Código com Tempo Mínimo de Inatividade (Rolling Update)
+*   **Problema**: Como o SQLite é um banco de dados de arquivo único com suporte a apenas um escritor por vez, o uso de escalabilidade horizontal pesada com Blue-Green deployment pode causar bloqueios de concorrência ou duplicação temporária de containers acessando o mesmo arquivo.
+*   **Requisitos**: Utilizar a estratégia de **Rolling Update** controlada no Docker Compose com apenas uma réplica da API ativa. O comando de deploy:
+    ```bash
+    docker compose up -d --build --no-deps web
+    ```
+    Reconstrói e substitui o container em menos de 2 segundos. O Nginx deve ter uma página estática temporária de manutenção em caso de falha do upstream.
+
+### 6.4. Alerta de Atualização de Versão no Frontend SPA
+*   **Problema**: Usuários com o app aberto em segundo plano no celular (PWA/SPA) continuam executando código JavaScript antigo em memória. Se a API for atualizada, as requisições do frontend antigo podem bater com contratos novos quebrados, gerando erros silenciosos para o usuário.
+*   **Requisitos**:
+    1.  **Endpoint de Versão**: Criar rota `GET /api/version` que retorna o hash de commit Git ou versão atual (ex: `{"version": "1.0.4"}`).
+    2.  **Polling / Interceptor de Erro**: O frontend faz uma verificação periódica de hora em hora (ou lê o header de versão `X-App-Version` anexado a todas as respostas HTTP da API). Ao detectar uma mudança de versão, exibe um banner ou toast persistente: *"Nova versão disponível! Clique aqui para recarregar."*, forçando o recarregamento do navegador (`window.location.reload(true)`) para limpar o cache de bundles JavaScript.
+
