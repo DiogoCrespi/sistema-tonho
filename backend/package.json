@@ -12,7 +12,7 @@
     "test": "jest --runInBand --detectOpenHandles",
     "migrate": "knex migrate:latest --knexfile knexfile.js",
     "migrate:rollback": "knex migrate:rollback --knexfile knexfile.js",
-    "migrate:status": "knex migrate:status --knexfile knexfile.js",
+    "migrate:status": "node src/scripts/validateMigrations.js",
     "access-key:create": "node src/scripts/createAccessKey.js",
     "db:backup": "node src/scripts/backupDatabase.js",
     "db:restore": "node src/scripts/restoreBackup.js",
