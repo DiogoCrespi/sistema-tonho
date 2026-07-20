@@ -349,9 +349,9 @@ Este documento registra o planejamento, a execução, os testes e a entrega de c
 
 ## BUS-01 — Sessões Reais de Treino
 
-- Estado: em andamento
+- Estado: concluído; aguardando merge
 - Branch: `feat/bus-01-workout-sessions`
-- Pull request: pendente
+- Pull request: https://github.com/carlossuzin6111-code/sistema-tonho/pull/86
 - Início: 20/07/2026
 - Prioridade: 3/10
 
@@ -368,10 +368,11 @@ Este documento registra o planejamento, a execução, os testes e a entrega de c
 - [x] Criar migration Knex `202607200001_create_workout_sessions.js` criando as tabelas `workout_sessions` e `workout_session_exercises` com chaves estrangeiras e índices.
 - [x] Implementar o controller `backend/src/controllers/workoutSessionController.js` para início, atualização progressiva, conclusão, cancelamento e consulta de histórico com controle de acesso IDOR.
 - [x] Adicionar schemas de validação no `backend/src/middleware/validateRequest.js`.
+- [x] Adicionar script `backend/src/scripts/validateMigrations.js` garantindo destruição limpa do pool de conexões ao verificar migrations.
 - [x] Registrar rotas `/api/workout-sessions` e documentação OpenAPI/Swagger no `backend/src/index.js`.
 - [x] Criar suíte de testes de integração `backend/src/tests/workoutSessions.test.js` cobrindo o fluxo completo e isolamento entre locatários.
 - [x] Executar suítes de testes do backend, frontend e auditorias de segurança.
-- [ ] Abrir PR e registrar link no arquivo de controle.
+- [x] Abrir PR e registrar link no arquivo de controle.
 - [ ] Acompanhar CI.
 
 ### Critérios de aceite
