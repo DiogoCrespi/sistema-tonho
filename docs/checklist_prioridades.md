@@ -231,3 +231,5 @@ Esta matriz correlaciona cada ID de requisito aos arquivos de implementação e 
 | 29/07/2026 | BUS-07 | Campo `last_activity_at`, atualização no início/progresso e endpoint heartbeat autenticado para sessões ativas | Branch `bus/bus-07-active-session`; migrations/workout sessions 15/15; `git diff --check` aprovado | Parcial: temporizador e recuperação automática no frontend ainda pendentes |
 | 29/07/2026 | UX-08 | Quota agregada configurável de 20 MiB para imagens Base64 de exercícios, validação de MIME/assinatura mantida e respostas `413` para excesso; avatar já possui quota e reconciliação por usuário | Branch `ux/ux-08-upload-quotas`; backend focado 82/82 | Parcial: migrar novos uploads para multipart e executar reconciliação global periódica |
 Este registro deve ser atualizado no mesmo PR de cada tópico. Nenhum item deve ser marcado como **Implementado** enquanto seus critérios de aceite e integrações essenciais permanecerem pendentes.
+
+| 30/07/2026 | CI | PR #168 mesclado com todos os checks verdes; PRs duplicados #119–#132 fechados e mantidos apenas os PRs mais recentes/únicos para revalidação | Hotfix aplicado na base main | Em acompanhamento |

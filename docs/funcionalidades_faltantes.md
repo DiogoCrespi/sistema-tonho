@@ -329,3 +329,6 @@ Este documento atua como o inventário de engenharia contendo especificações d
 
 ### [MOB-04] Armazenamento Seguro de Chaves (Secure Storage)
 *   **Especificação**: Em ambiente híbrido móvel, armazenar JWT localmente via plugin `@capacitor-community/secure-storage` integrado ao Keystore/Keychain nativo do celular.
+
+### Higienização de PRs (30/07/2026)
+O PR #168 foi mesclado após aprovação de todos os jobs. Os PRs antigos #119–#132 foram fechados por duplicidade; as versões mais recentes permanecem abertas para reexecução contra a base corrigida. PRs únicos não foram fechados.
