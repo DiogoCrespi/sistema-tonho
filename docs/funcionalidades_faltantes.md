@@ -326,6 +326,9 @@ Este documento atua como o inventário de engenharia contendo especificações d
 
 ---
 
+### Higienização final de PRs (30/07/2026)
+O PR #168 foi mesclado com todos os checks verdes. Os snapshots duplicados/intermediários foram encerrados; as mudanças de sessões estão contidas nos PRs cumulativos #164/#165, que também foram mesclados. O repositório ficou sem PRs abertos pendentes.
+
 ## 6. Empacotamento Híbrido Mobile APK (Grupo MOB)
 
 ### [MOB-01] Wrapper Híbrido com Capacitor
