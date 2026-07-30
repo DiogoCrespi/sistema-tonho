@@ -226,10 +226,10 @@ Ao retornar o dashboard do aluno ao foreground, o cliente redesenha o cronômetr
 ### [BUS-10] Edição e Exclusão de Mensagens no Chat
 *   **Especificação**: Endpoints `PUT /api/chat/:messageId` e `DELETE /api/chat/:messageId` atualizando as streams SSE ativas dos envolvidos.
 * **Progresso em 29/07/2026**: Migration `202607290013_add_chat_message_lifecycle.js` adiciona `edited_at`/`deleted_at`; somente o remetente pode alterar a mensagem. A exclusão é soft-delete, o histórico retorna `message: null` e os eventos SSE `message.updated`/`message.deleted` são enviados ao remetente e destinatário.
-* **Pendente**: controles de edição/exclusão no frontend e renderização dos eventos SSE com indicação acessível de mensagem alterada/removida.
+* **Concluído neste pacote**: controles de edição/exclusão no frontend e renderização dos eventos SSE com indicação acessível de mensagem alterada/removida.
 
 ### Grupo consolidado de UX do chat (30/07/2026)
-O frontend agora oferece edição e exclusão somente para mensagens próprias, com confirmação, rotas autenticadas e conteúdo renderizado como texto seguro. A paginação incremental e a atualização visual dos eventos SSE serão adicionadas antes da conclusão do pacote.
+O frontend oferece edição e exclusão somente para mensagens próprias, com confirmação, rotas autenticadas, conteúdo renderizado como texto seguro e atualização imediata dos eventos SSE `message.updated`/`message.deleted`. Continua pendente apenas a paginação incremental no cliente.
 
 ### [BUS-11] Indicador de "Digitando..." via SSE
 *   **Especificação**: Evento leve `event: typing` enviado pelo Express a partir de chamadas rápidas `POST /api/chat/typing` com de-bounce.
