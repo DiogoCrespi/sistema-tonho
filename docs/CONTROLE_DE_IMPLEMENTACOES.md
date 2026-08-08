@@ -2,6 +2,12 @@
 
 Este documento registra o planejamento, a execução, os testes e a entrega de cada bloco de evolução. Ele deve ser atualizado em toda modificação relevante antes do commit e do pull request.
 
+## SEC-06 — Política de origem para CSRF em cookies
+
+- Implementado no PR #222: `CSRF_REQUIRE_ORIGIN=true` exige `Origin` ou `Referer` em mutações autenticadas por cookie.
+- Bearer/WebView continuam compatíveis quando a variável permanece desativada.
+- Validação estática concluída; testes HTTP completos serão executados no pipeline do PR.
+
 ## SEC-01 — Auditoria consolidada de ownership e proteção contra IDOR
 
 - Estado: planejado e em implementação
